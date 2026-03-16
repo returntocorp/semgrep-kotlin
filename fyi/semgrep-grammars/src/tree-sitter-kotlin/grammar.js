@@ -42,6 +42,7 @@ const PREC = {
   VAR_DECL: 3,
   SPREAD: 2,
   SIMPLE_USER_TYPE: 2,
+  MODIFIERS: 1,
   ASSIGNMENT: 1,
   BLOCK: 1,
   ARGUMENTS: 1,
@@ -51,7 +52,7 @@ const PREC = {
 };
 const DEC_DIGITS = token(sep1(/[0-9]+/, /_+/));
 const HEX_DIGITS = token(sep1(/[0-9a-fA-F]+/, /_+/));
-const BIN_DIGITS = token(sep1(/[01]/, /_+/));
+const BIN_DIGITS = token(sep1(/[01]+/, /_+/));
 const REAL_EXPONENT = token(seq(/[eE]/, optional(/[+-]/), DEC_DIGITS));
 
 module.exports = grammar({
@@ -72,32 +73,52 @@ module.exports = grammar({
     [$.platform_modifier, $.simple_identifier],
     // "data", "inner" as class modifier or id
     [$.class_modifier, $.simple_identifier],
+    // "override" as member modifier conflicts with override as an identifier
+    [$.member_modifier, $.simple_identifier],
+    // visibility modifiers as identifiers
+    [$.visibility_modifier, $.simple_identifier],
+    // inheritance modifiers as identifiers
+    [$.inheritance_modifier, $.simple_identifier],
+    // property modifier as identifier
+    [$.property_modifier, $.simple_identifier],
+    // parameter modifiers as identifiers
+    [$.parameter_modifier, $.simple_identifier],
+    [$.parameter_modifiers],
+    [$.type_parameter_modifiers],
 
     // "<x>.<y> = z assignment conflicts with <x>.<y>() function call"
     [$._postfix_unary_expression, $._expression],
 
     // ambiguity between generics and comparison operations (foo < b > c)
-    [$.call_expression, $.range_expression, $.comparison_expression],
-    [$.call_expression, $.elvis_expression, $.comparison_expression],
-    [$.call_expression, $.check_expression, $.comparison_expression],
-    [$.call_expression, $.additive_expression, $.comparison_expression],
-    [$.call_expression, $.infix_expression, $.comparison_expression],
-    [$.call_expression, $.multiplicative_expression, $.comparison_expression],
+    // _generic_call_expression is the prec.dynamic(1) variant with required type_arguments
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.range_expression, $.comparison_expression],
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.elvis_expression, $.comparison_expression],
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.check_expression, $.comparison_expression],
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.additive_expression, $.comparison_expression],
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.infix_expression, $.comparison_expression],
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.multiplicative_expression, $.comparison_expression],
     [$.type_arguments, $._comparison_operator],
 
     // ambiguity between prefix expressions and annotations before functions
     [$._statement, $.prefix_expression],
-    [$._statement, $.prefix_expression, $.modifiers],
     [$.prefix_expression, $.when_subject],
     [$.prefix_expression, $.value_argument],
+    // ambiguity between prefix unary operators and other expression types
+    [$.call_expression, $._generic_call_expression, $.navigation_expression, $.prefix_expression, $.comparison_expression],
 
     // ambiguity between multiple user types and class property/function declarations
     [$.user_type],
     [$.user_type, $.anonymous_function],
     //[$.user_type, $.function_type],
 
-    // ambiguity between annotated_lambda with modifiers and modifiers from var declarations
-    [$.annotated_lambda, $.modifiers],
+    // ambiguity caused by 'suspend'
+    [$.function_modifier, $.simple_identifier],
+    [$._type_modifier, $.simple_identifier],
+    [$.delegation_specifier, $._type_modifier, $.simple_identifier],
+    [$.anonymous_function, $.function_modifier],
+    [$.anonymous_function, $.simple_identifier],
+    [$.anonymous_function, $.function_modifier, $.simple_identifier],
+
 
     // ambiguity between simple identifier 'set/get' with actual setter/getter functions.
     [$.setter, $.simple_identifier],
@@ -106,6 +127,16 @@ module.exports = grammar({
     // ambiguity between parameter modifiers in anonymous functions
     [$.parameter_modifiers, $._type_modifier],
 
+    // ambiguity for object literal
+    [$.object_literal],
+    [$.object_literal, $.class_modifier],
+    [$.object_literal, $.class_modifier, $.simple_identifier],
+    [$.object_literal, $.simple_identifier],
+    [$.object_literal, $.object_declaration],
+
+    // ambiguity between use of suspend in type and delegation specifiers
+    [$.delegation_specifier, $._type_modifier],
+
     // ambiguity between type modifiers before an @
     [$.type_modifiers],
     // ambiguity between associating type modifiers
@@ -113,6 +144,22 @@ module.exports = grammar({
 
     [$.receiver_type],
     [$.receiver_type, $._type],
+
+    // parenthesized function type?
+    [$.delegation_specifier, $._type],
+
+    // Ambiguity between regular expressions and the no-trailing-lambda variant
+    // used in explicit_delegation to prevent `{ }` after `by expr` being parsed
+    // as a trailing lambda instead of class_body.
+    [$._expression, $._expression_no_trailing_lambda],
+    [$._primary_expression, $._primary_expression_no_trailing_lambda],
+    // Three-way conflict: callable_reference (Foo::bar) starts with simple_identifier
+    // which both primary_expression variants can match.
+    [$._primary_expression, $._primary_expression_no_trailing_lambda, $.callable_reference],
+
+    // ambiguity between call_suffix and _generic_call_suffix (both can match type_arguments + args)
+    [$.call_suffix, $._generic_call_suffix],
+    [$._call_suffix_no_trailing_lambda, $._generic_call_suffix_no_trailing_lambda],
   ],
 
   externals: $ => [
@@ -123,6 +170,8 @@ module.exports = grammar({
     $._string_start,
     $._string_end,
     $.string_content,
+    $._primary_constructor_keyword,
+    $._import_dot,
   ],
 
   extras: $ => [
@@ -172,7 +221,7 @@ module.exports = grammar({
     import_header: $ => seq(
       "import",
       alias($._import_identifier, $.identifier),
-      optional(choice(seq(".", $.wildcard_import), $.import_alias)),
+      optional(choice(seq($._import_dot, $.wildcard_import), $.import_alias)),
       $._semi
     ),
 
@@ -236,7 +285,7 @@ module.exports = grammar({
     )),
 
     primary_constructor: $ => seq(
-      optional(seq(optional($.modifiers), "constructor")),
+      optional(seq(optional($.modifiers), $._primary_constructor_keyword)),
       $._class_parameters
     ),
 
@@ -266,11 +315,15 @@ module.exports = grammar({
       ","
     )),
 
-    delegation_specifier: $ => prec.left(choice(
+    delegation_specifier: $ => prec.right(choice(
       $.constructor_invocation,
       $.explicit_delegation,
       $.user_type,
-      $.function_type
+      $.function_type,
+      // The grammar doesn't explicitly define it, but parenthesized function
+      // types seem to work!
+      seq('(', $.function_type, ')'),
+      seq("suspend", $.function_type)
     )),
 
     constructor_invocation: $ => seq($.user_type, $.value_arguments),
@@ -283,7 +336,61 @@ module.exports = grammar({
         $.function_type
       ),
       "by",
-      $._expression
+      // Use a restricted expression that doesn't allow trailing lambda calls
+      // to avoid ambiguity with class_body in object literals.
+      // e.g., `object : Interface by delegate { }` - the `{` should be class_body, not a lambda.
+      // If a trailing lambda delegate is truly needed, use parentheses:
+      // `object : Interface by (factory { config }) { ... }`
+      $._expression_no_trailing_lambda
+    ),
+
+    // Expression variant that doesn't allow call expressions with trailing lambdas.
+    // This is used in explicit_delegation to prevent ambiguity with class_body.
+    _expression_no_trailing_lambda: $ => choice(
+      $._unary_expression,
+      $._binary_expression,
+      $._primary_expression_no_trailing_lambda
+    ),
+
+    _primary_expression_no_trailing_lambda: $ => choice(
+      $.parenthesized_expression,
+      $.simple_identifier,
+      $._literal_constant,
+      $.string_literal,
+      $.callable_reference,
+      alias($.call_expression_no_trailing_lambda, $.call_expression),
+      alias($._generic_call_expression_no_trailing_lambda, $.call_expression),
+      $._function_literal,
+      $.object_literal,
+      $.collection_literal,
+      $.this_expression,
+      $.super_expression,
+      $.if_expression,
+      $.when_expression,
+      $.try_expression,
+      $.jump_expression
+    ),
+
+    // Call expression that only allows value_arguments, not trailing lambdas
+    call_expression_no_trailing_lambda: $ => prec.left(PREC.POSTFIX, seq(
+      $._expression_no_trailing_lambda,
+      alias($._call_suffix_no_trailing_lambda, $.call_suffix)
+    )),
+
+    // Generic call (required type_arguments) without trailing lambda
+    _generic_call_expression_no_trailing_lambda: $ => prec.left(PREC.POSTFIX, prec.dynamic(1, seq(
+      $._expression_no_trailing_lambda,
+      alias($._generic_call_suffix_no_trailing_lambda, $.call_suffix)
+    ))),
+
+    _call_suffix_no_trailing_lambda: $ => seq(
+      optional($.type_arguments),
+      $.value_arguments
+    ),
+
+    _generic_call_suffix_no_trailing_lambda: $ => seq(
+      $.type_arguments,
+      $.value_arguments
     ),
 
     type_parameters: $ => seq("<", sep1($.type_parameter, ","), optional(","), ">"),
@@ -381,11 +488,10 @@ module.exports = grammar({
         $.property_delegate
       )),
       optional(';'),
-      choice(
-        // TODO: Getter-setter combinations
-        optional($.getter),
-        optional($.setter)
-      )
+      optional(choice(
+        seq($.getter, optional($.setter)),
+        seq($.setter, optional($.getter)),
+      ))
     )),
 
     property_delegate: $ => seq("by", $._expression),
@@ -490,10 +596,10 @@ module.exports = grammar({
 
     nullable_type: $ => seq(
       choice($._type_reference, $.parenthesized_type),
-      repeat1($._quest)
+      repeat1($.quest)
     ),
 
-    _quest: $ => "?",
+    quest: $ => "?",
 
     // TODO: Figure out a better solution than right associativity
     //       to prevent nested types from being recognized as
@@ -637,11 +743,24 @@ module.exports = grammar({
 
     call_expression: $ => prec.left(PREC.POSTFIX, seq($._expression, $.call_suffix)),
 
+    // Generic call expression: call with REQUIRED type_arguments.
+    // prec.dynamic(1) tells GLR to prefer the generic-call interpretation
+    // (f<T>(x)) over the comparison interpretation (f < T > (x)).
+    // Separated from call_expression so the dynamic boost only applies
+    // when type_arguments are actually parsed, not for all calls.
+    _generic_call_expression: $ => prec.left(PREC.POSTFIX, prec.dynamic(1, seq(
+      $._expression,
+      alias($._generic_call_suffix, $.call_suffix)
+    ))),
+
     indexing_expression: $ => prec.left(PREC.POSTFIX, seq($._expression, $.indexing_suffix)),
 
     navigation_expression: $ => prec.left(PREC.POSTFIX, seq($._expression, $.navigation_suffix)),
 
-    prefix_expression: $ => prec.right(seq(choice($.annotation, $.label, $._prefix_unary_operator), $._expression)),
+    prefix_expression: $ => choice(
+      prec.right(PREC.PREFIX, seq($._prefix_unary_operator, $._expression)),
+      prec.right(seq(choice($.annotation, $.label), $._expression)),
+    ),
 
     as_expression: $ => prec.left(PREC.AS, seq($._expression, $._as_operator, $._type)),
 
@@ -658,8 +777,6 @@ module.exports = grammar({
       $.check_expression,
       $.comparison_expression,
       $.equality_expression,
-      $.comparison_expression,
-      $.equality_expression,
       $.conjunction_expression,
       $.disjunction_expression
     ),
@@ -668,15 +785,15 @@ module.exports = grammar({
 
     additive_expression: $ => prec.left(PREC.ADDITIVE, seq($._expression, $._additive_operator, $._expression)),
 
-    range_expression: $ => prec.left(PREC.RANGE, seq($._expression, "..", $._expression)),
+    range_expression: $ => prec.left(PREC.RANGE, seq($._expression, choice("..", "..<"), $._expression)),
 
     infix_expression: $ => prec.left(PREC.INFIX, seq($._expression, $.simple_identifier, $._expression)),
 
     elvis_expression: $ => prec.left(PREC.ELVIS, seq($._expression, "?:", $._expression)),
 
     check_expression: $ => prec.left(PREC.CHECK, seq($._expression, choice(
-      seq($._in_operator, $._expression),
-      seq($._is_operator, $._type)))),
+      seq(optional("!"), $._in_operator, $._expression),
+      seq(optional("!"), $._is_operator, $._type)))),
 
     comparison_expression: $ => prec.left(PREC.COMPARISON, seq($._expression, $._comparison_operator, $._expression)),
 
@@ -691,6 +808,8 @@ module.exports = grammar({
     indexing_suffix: $ => seq("[", sep1($._expression, ","), "]"),
 
     navigation_suffix: $ => seq(
+      // this introduces ambiguities with 'less than' for comparisons
+      optional($.type_arguments),
       $._member_access_operator,
       choice(
         $.simple_identifier,
@@ -702,6 +821,15 @@ module.exports = grammar({
     call_suffix: $ => prec.left(seq(
       // this introduces ambiguities with 'less than' for comparisons
       optional($.type_arguments),
+      choice(
+        prec(PREC.ARGUMENTS, seq(optional($.value_arguments), $.annotated_lambda)),
+        $.value_arguments
+      )
+    )),
+
+    // Call suffix with REQUIRED type_arguments (used by _generic_call_expression)
+    _generic_call_suffix: $ => prec.left(seq(
+      $.type_arguments,
       choice(
         prec(PREC.ARGUMENTS, seq(optional($.value_arguments), $.annotated_lambda)),
         $.value_arguments
@@ -741,6 +869,7 @@ module.exports = grammar({
       $.string_literal,
       $.callable_reference,
       $.call_expression,
+      alias($._generic_call_expression, $.call_expression),
       $._function_literal,
       $.object_literal,
       $.collection_literal,
@@ -804,10 +933,11 @@ module.exports = grammar({
 
     _lambda_parameter: $ => choice(
       $.variable_declaration,
-      $.multi_variable_declaration
+      seq($.multi_variable_declaration, optional(seq(":", $._type)))
     ),
 
     anonymous_function: $ => prec.right(seq(
+      optional("suspend"),
       "fun",
       optional(seq(sep1($._simple_user_type, "."), ".")), // TODO
       $.function_value_parameters,
@@ -820,10 +950,18 @@ module.exports = grammar({
       $.anonymous_function
     ),
 
-    object_literal: $ => seq(
-      "object",
-      optional(seq(":", $._delegation_specifiers)),
-      $.class_body
+    object_literal: $ => choice(
+      prec.dynamic(1, seq(
+        optional("data"),
+        "object",
+        optional(seq(":", $._delegation_specifiers)),
+        $.class_body,
+      )),
+      seq(
+        optional("data"),
+        "object",
+        optional(seq(":", $._delegation_specifiers)),
+      ),
     ),
 
     this_expression: $ => choice(
@@ -874,7 +1012,7 @@ module.exports = grammar({
 
     when_entry: $ => seq(
       choice(
-        seq($.when_condition, repeat(seq(",", $.when_condition))),
+        seq($.when_condition, repeat(seq(",", $.when_condition)), optional(",")),
         "else"
       ),
       "->",
@@ -885,21 +1023,21 @@ module.exports = grammar({
     when_condition: $ => choice(
       $._expression,
       $.range_test,
-      $.type_test
+      $.type_test,
     ),
 
-    range_test: $ => seq($._in_operator, $._expression),
+    range_test: $ => seq(optional("!"), $._in_operator, $._expression),
 
-    type_test: $ => seq($._is_operator, $._type),
+    type_test: $ => seq(optional("!"), $._is_operator, $._type),
 
-    try_expression: $ => seq(
+    try_expression: $ => prec.right(seq(
       "try",
       $._block,
       choice(
         seq(repeat1($.catch_block), optional($.finally_block)),
         $.finally_block
       )
-    ),
+    )),
 
     catch_block: $ => seq(
       "catch",
@@ -935,9 +1073,9 @@ module.exports = grammar({
 
     _comparison_operator: $ => choice("<", ">", "<=", ">="),
 
-    _in_operator: $ => choice("in", "!in"),
+    _in_operator: $ => "in",
 
-    _is_operator: $ => choice("is", "!is"),
+    _is_operator: $ => "is",
 
     _additive_operator: $ => choice("+", "-"),
 
@@ -980,7 +1118,9 @@ module.exports = grammar({
     // Modifiers
     // ==========
 
-    modifiers: $ => prec.left(repeat1(choice($.annotation, $._modifier))),
+    modifiers: $ => prec.right(
+      repeat1(prec.right(PREC.MODIFIERS, choice($.annotation, $._modifier)))
+    ),
 
     parameter_modifiers: $ => repeat1(choice($.annotation, $.parameter_modifier)),
 
@@ -1107,8 +1247,52 @@ module.exports = grammar({
       "value",
       "actual",
       "set",
-      "get"
-      // TODO: More soft keywords
+      "get",
+      "override",
+      "suspend",
+      // Batch 1: covered by existing conflict rules (class_modifier, member_modifier, function_modifier)
+      "annotation",
+      "sealed",
+      "lateinit",
+      "tailrec",
+      "operator",
+      "infix",
+      "inline",
+      "external",
+      // Batch 2: visibility modifiers
+      "public",
+      "private",
+      "internal",
+      "protected",
+      // Batch 3: inheritance modifiers
+      "abstract",
+      "final",
+      "open",
+      // Batch 4: property, parameter, reification modifiers
+      "const",
+      "vararg",
+      "noinline",
+      "crossinline",
+      "reified",
+      // Batch 5: annotation use-site targets (no conflict rules needed — disambiguated by ":")
+      "field",
+      "property",
+      "receiver",
+      "param",
+      "setparam",
+      "delegate",
+      // Batch 6: structural keywords used as identifiers
+      "companion",
+      "constructor",
+      "init",
+      "dynamic",
+      "where",
+      "catch",
+      "finally",
+      // Batch 7: enum
+      "enum",
+      // Batch 8: variance modifiers — skipped, causes new break on SoftKeywordsInTypeArguments.kt
+      // "out", "in" — too ambiguous in type parameter contexts
     ),
 
     identifier: $ => sep1($.simple_identifier, "."),
@@ -1117,7 +1301,7 @@ module.exports = grammar({
     // wildcard_import node while being compatible with identifier
     _import_identifier: $ => choice(
       $.simple_identifier,
-      seq($._import_identifier, ".", $.simple_identifier),
+      seq($._import_identifier, $._import_dot, $.simple_identifier),
     ),
 
     // ====================
