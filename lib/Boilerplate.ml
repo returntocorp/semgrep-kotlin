@@ -1003,17 +1003,27 @@ and map_catch_block (env : env) ((v1, v2, v3, v4, v5, v6, v7, v8) : CST.catch_bl
   let v8 = map_block env v8 in
   R.Tuple [v1; v2; v3; v4; v5; v6; v7; v8]
 
-and map_class_body (env : env) ((v1, v2, v3) : CST.class_body) =
-  let v1 = (* "{" *) token env v1 in
-  let v2 =
-    (match v2 with
-    | Some x -> R.Option (Some (
-        map_class_member_declarations env x
-      ))
-    | None -> R.Option None)
-  in
-  let v3 = (* "}" *) token env v3 in
-  R.Tuple [v1; v2; v3]
+and map_class_body (env : env) (x : CST.class_body) =
+  (match x with
+  | `LCURL_opt_class_member_declas_RCURL (v1, v2, v3) -> R.Case ("LCURL_opt_class_member_declas_RCURL",
+      let v1 = (* "{" *) token env v1 in
+      let v2 =
+        (match v2 with
+        | Some x -> R.Option (Some (
+            map_class_member_declarations env x
+          ))
+        | None -> R.Option None)
+      in
+      let v3 = (* "}" *) token env v3 in
+      R.Tuple [v1; v2; v3]
+    )
+  | `LCURL_ellips_RCURL (v1, v2, v3) -> R.Case ("LCURL_ellips_RCURL",
+      let v1 = (* "{" *) token env v1 in
+      let v2 = (* "..." *) token env v2 in
+      let v3 = (* "}" *) token env v3 in
+      R.Tuple [v1; v2; v3]
+    )
+  )
 
 and map_class_declaration (env : env) (x : CST.class_declaration) =
   (match x with
@@ -1562,32 +1572,42 @@ and map_directly_assignable_expression (env : env) (x : CST.directly_assignable_
     )
   )
 
-and map_enum_class_body (env : env) ((v1, v2, v3, v4) : CST.enum_class_body) =
-  let v1 = (* "{" *) token env v1 in
-  let v2 =
-    (match v2 with
-    | Some x -> R.Option (Some (
-        map_enum_entries env x
-      ))
-    | None -> R.Option None)
-  in
-  let v3 =
-    (match v3 with
-    | Some (v1, v2) -> R.Option (Some (
-        let v1 = (* ";" *) token env v1 in
-        let v2 =
-          (match v2 with
-          | Some x -> R.Option (Some (
-              map_class_member_declarations env x
-            ))
-          | None -> R.Option None)
-        in
-        R.Tuple [v1; v2]
-      ))
-    | None -> R.Option None)
-  in
-  let v4 = (* "}" *) token env v4 in
-  R.Tuple [v1; v2; v3; v4]
+and map_enum_class_body (env : env) (x : CST.enum_class_body) =
+  (match x with
+  | `LCURL_opt_enum_entries_opt_SEMI_opt_class_member_declas_RCURL (v1, v2, v3, v4) -> R.Case ("LCURL_opt_enum_entries_opt_SEMI_opt_class_member_declas_RCURL",
+      let v1 = (* "{" *) token env v1 in
+      let v2 =
+        (match v2 with
+        | Some x -> R.Option (Some (
+            map_enum_entries env x
+          ))
+        | None -> R.Option None)
+      in
+      let v3 =
+        (match v3 with
+        | Some (v1, v2) -> R.Option (Some (
+            let v1 = (* ";" *) token env v1 in
+            let v2 =
+              (match v2 with
+              | Some x -> R.Option (Some (
+                  map_class_member_declarations env x
+                ))
+              | None -> R.Option None)
+            in
+            R.Tuple [v1; v2]
+          ))
+        | None -> R.Option None)
+      in
+      let v4 = (* "}" *) token env v4 in
+      R.Tuple [v1; v2; v3; v4]
+    )
+  | `LCURL_ellips_RCURL (v1, v2, v3) -> R.Case ("LCURL_ellips_RCURL",
+      let v1 = (* "{" *) token env v1 in
+      let v2 = (* "..." *) token env v2 in
+      let v3 = (* "}" *) token env v3 in
+      R.Tuple [v1; v2; v3]
+    )
+  )
 
 and map_enum_entries (env : env) ((v1, v2, v3) : CST.enum_entries) =
   let v1 = map_enum_entry env v1 in
@@ -1607,30 +1627,37 @@ and map_enum_entries (env : env) ((v1, v2, v3) : CST.enum_entries) =
   in
   R.Tuple [v1; v2; v3]
 
-and map_enum_entry (env : env) ((v1, v2, v3, v4) : CST.enum_entry) =
-  let v1 =
-    (match v1 with
-    | Some x -> R.Option (Some (
-        map_modifiers env x
-      ))
-    | None -> R.Option None)
-  in
-  let v2 = map_simple_identifier env v2 in
-  let v3 =
-    (match v3 with
-    | Some x -> R.Option (Some (
-        map_value_arguments env x
-      ))
-    | None -> R.Option None)
-  in
-  let v4 =
-    (match v4 with
-    | Some x -> R.Option (Some (
-        map_class_body env x
-      ))
-    | None -> R.Option None)
-  in
-  R.Tuple [v1; v2; v3; v4]
+and map_enum_entry (env : env) (x : CST.enum_entry) =
+  (match x with
+  | `Opt_modifs_simple_id_opt_value_args_opt_class_body (v1, v2, v3, v4) -> R.Case ("Opt_modifs_simple_id_opt_value_args_opt_class_body",
+      let v1 =
+        (match v1 with
+        | Some x -> R.Option (Some (
+            map_modifiers env x
+          ))
+        | None -> R.Option None)
+      in
+      let v2 = map_simple_identifier env v2 in
+      let v3 =
+        (match v3 with
+        | Some x -> R.Option (Some (
+            map_value_arguments env x
+          ))
+        | None -> R.Option None)
+      in
+      let v4 =
+        (match v4 with
+        | Some x -> R.Option (Some (
+            map_class_body env x
+          ))
+        | None -> R.Option None)
+      in
+      R.Tuple [v1; v2; v3; v4]
+    )
+  | `Ellips tok -> R.Case ("Ellips",
+      (* "..." *) token env tok
+    )
+  )
 
 and map_expression (env : env) (x : CST.expression) =
   (match x with
@@ -3015,42 +3042,49 @@ and map_when_condition (env : env) (x : CST.when_condition) =
     )
   )
 
-and map_when_entry (env : env) ((v1, v2, v3, v4) : CST.when_entry) =
-  let v1 =
-    (match v1 with
-    | `When_cond_rep_COMMA_when_cond_opt_COMMA (v1, v2, v3) -> R.Case ("When_cond_rep_COMMA_when_cond_opt_COMMA",
-        let v1 = map_when_condition env v1 in
-        let v2 =
-          R.List (List.map (fun (v1, v2) ->
-            let v1 = (* "," *) token env v1 in
-            let v2 = map_when_condition env v2 in
-            R.Tuple [v1; v2]
-          ) v2)
-        in
-        let v3 =
-          (match v3 with
-          | Some tok -> R.Option (Some (
-              (* "," *) token env tok
-            ))
-          | None -> R.Option None)
-        in
-        R.Tuple [v1; v2; v3]
-      )
-    | `Else tok -> R.Case ("Else",
-        (* "else" *) token env tok
-      )
+and map_when_entry (env : env) (x : CST.when_entry) =
+  (match x with
+  | `Choice_when_cond_rep_COMMA_when_cond_opt_COMMA_DASHGT_cont_stru_body_opt_semi (v1, v2, v3, v4) -> R.Case ("Choice_when_cond_rep_COMMA_when_cond_opt_COMMA_DASHGT_cont_stru_body_opt_semi",
+      let v1 =
+        (match v1 with
+        | `When_cond_rep_COMMA_when_cond_opt_COMMA (v1, v2, v3) -> R.Case ("When_cond_rep_COMMA_when_cond_opt_COMMA",
+            let v1 = map_when_condition env v1 in
+            let v2 =
+              R.List (List.map (fun (v1, v2) ->
+                let v1 = (* "," *) token env v1 in
+                let v2 = map_when_condition env v2 in
+                R.Tuple [v1; v2]
+              ) v2)
+            in
+            let v3 =
+              (match v3 with
+              | Some tok -> R.Option (Some (
+                  (* "," *) token env tok
+                ))
+              | None -> R.Option None)
+            in
+            R.Tuple [v1; v2; v3]
+          )
+        | `Else tok -> R.Case ("Else",
+            (* "else" *) token env tok
+          )
+        )
+      in
+      let v2 = (* "->" *) token env v2 in
+      let v3 = map_control_structure_body env v3 in
+      let v4 =
+        (match v4 with
+        | Some tok -> R.Option (Some (
+            (* automatic_semicolon *) token env tok
+          ))
+        | None -> R.Option None)
+      in
+      R.Tuple [v1; v2; v3; v4]
     )
-  in
-  let v2 = (* "->" *) token env v2 in
-  let v3 = map_control_structure_body env v3 in
-  let v4 =
-    (match v4 with
-    | Some tok -> R.Option (Some (
-        (* automatic_semicolon *) token env tok
-      ))
-    | None -> R.Option None)
-  in
-  R.Tuple [v1; v2; v3; v4]
+  | `Ellips tok -> R.Case ("Ellips",
+      (* "..." *) token env tok
+    )
+  )
 
 and map_when_expression (env : env) ((v1, v2, v3, v4, v5) : CST.when_expression) =
   let v1 = (* "when" *) token env v1 in

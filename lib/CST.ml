@@ -437,11 +437,16 @@ and catch_block = (
   * block
 )
 
-and class_body = (
-    Token.t (* "{" *)
-  * class_member_declarations option
-  * Token.t (* "}" *)
-)
+and class_body = [
+    `LCURL_opt_class_member_declas_RCURL of (
+        Token.t (* "{" *)
+      * class_member_declarations option
+      * Token.t (* "}" *)
+    )
+  | `LCURL_ellips_RCURL of (
+        Token.t (* "{" *) * Token.t (* "..." *) * Token.t (* "}" *)
+    )
+]
 
 and class_declaration = [
     `Opt_modifs_choice_class_simple_id_opt_type_params_opt_prim_cons_opt_COLON_dele_specis_opt_type_consts_opt_class_body of (
@@ -615,12 +620,17 @@ and directly_assignable_expression = [
   | `Simple_id of simple_identifier
 ]
 
-and enum_class_body = (
-    Token.t (* "{" *)
-  * enum_entries option
-  * (Token.t (* ";" *) * class_member_declarations option) option
-  * Token.t (* "}" *)
-)
+and enum_class_body = [
+    `LCURL_opt_enum_entries_opt_SEMI_opt_class_member_declas_RCURL of (
+        Token.t (* "{" *)
+      * enum_entries option
+      * (Token.t (* ";" *) * class_member_declarations option) option
+      * Token.t (* "}" *)
+    )
+  | `LCURL_ellips_RCURL of (
+        Token.t (* "{" *) * Token.t (* "..." *) * Token.t (* "}" *)
+    )
+]
 
 and enum_entries = (
     enum_entry
@@ -628,12 +638,15 @@ and enum_entries = (
   * Token.t (* "," *) option
 )
 
-and enum_entry = (
-    modifiers option
-  * simple_identifier
-  * value_arguments option
-  * class_body option
-)
+and enum_entry = [
+    `Opt_modifs_simple_id_opt_value_args_opt_class_body of (
+        modifiers option
+      * simple_identifier
+      * value_arguments option
+      * class_body option
+    )
+  | `Ellips of Token.t (* "..." *)
+]
 
 and expression = [
     `Choice_un_exp of [
@@ -1181,19 +1194,22 @@ and when_condition = [
   | `Type_test of type_test
 ]
 
-and when_entry = (
-    [
-        `When_cond_rep_COMMA_when_cond_opt_COMMA of (
-            when_condition
-          * (Token.t (* "," *) * when_condition) list (* zero or more *)
-          * Token.t (* "," *) option
-        )
-      | `Else of Token.t (* "else" *)
-    ]
-  * Token.t (* "->" *)
-  * control_structure_body
-  * automatic_semicolon (*tok*) option
-)
+and when_entry = [
+    `Choice_when_cond_rep_COMMA_when_cond_opt_COMMA_DASHGT_cont_stru_body_opt_semi of (
+        [
+            `When_cond_rep_COMMA_when_cond_opt_COMMA of (
+                when_condition
+              * (Token.t (* "," *) * when_condition) list (* zero or more *)
+              * Token.t (* "," *) option
+            )
+          | `Else of Token.t (* "else" *)
+        ]
+      * Token.t (* "->" *)
+      * control_structure_body
+      * automatic_semicolon (*tok*) option
+    )
+  | `Ellips of Token.t (* "..." *)
+]
 
 and when_expression = (
     Token.t (* "when" *)

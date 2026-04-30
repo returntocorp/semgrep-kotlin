@@ -685,13 +685,20 @@ let children_regexps : (string * Run.exp option) list = [
   );
   "class_body",
   Some (
-    Seq [
-      Token (Literal "{");
-      Opt (
-        Token (Name "class_member_declarations");
-      );
-      Token (Literal "}");
-    ];
+    Alt [|
+      Seq [
+        Token (Literal "{");
+        Opt (
+          Token (Name "class_member_declarations");
+        );
+        Token (Literal "}");
+      ];
+      Seq [
+        Token (Literal "{");
+        Token (Name "ellipsis");
+        Token (Literal "}");
+      ];
+    |];
   );
   "class_declaration",
   Some (
@@ -989,21 +996,28 @@ let children_regexps : (string * Run.exp option) list = [
   );
   "enum_class_body",
   Some (
-    Seq [
-      Token (Literal "{");
-      Opt (
-        Token (Name "enum_entries");
-      );
-      Opt (
-        Seq [
-          Token (Literal ";");
-          Opt (
-            Token (Name "class_member_declarations");
-          );
-        ];
-      );
-      Token (Literal "}");
-    ];
+    Alt [|
+      Seq [
+        Token (Literal "{");
+        Opt (
+          Token (Name "enum_entries");
+        );
+        Opt (
+          Seq [
+            Token (Literal ";");
+            Opt (
+              Token (Name "class_member_declarations");
+            );
+          ];
+        );
+        Token (Literal "}");
+      ];
+      Seq [
+        Token (Literal "{");
+        Token (Name "ellipsis");
+        Token (Literal "}");
+      ];
+    |];
   );
   "enum_entries",
   Some (
@@ -1022,18 +1036,21 @@ let children_regexps : (string * Run.exp option) list = [
   );
   "enum_entry",
   Some (
-    Seq [
-      Opt (
-        Token (Name "modifiers");
-      );
-      Token (Name "simple_identifier");
-      Opt (
-        Token (Name "value_arguments");
-      );
-      Opt (
-        Token (Name "class_body");
-      );
-    ];
+    Alt [|
+      Seq [
+        Opt (
+          Token (Name "modifiers");
+        );
+        Token (Name "simple_identifier");
+        Opt (
+          Token (Name "value_arguments");
+        );
+        Opt (
+          Token (Name "class_body");
+        );
+      ];
+      Token (Name "ellipsis");
+    |];
   );
   "equality_expression",
   Some (
@@ -2260,28 +2277,31 @@ let children_regexps : (string * Run.exp option) list = [
   );
   "when_entry",
   Some (
-    Seq [
-      Alt [|
-        Seq [
-          Token (Name "when_condition");
-          Repeat (
-            Seq [
+    Alt [|
+      Seq [
+        Alt [|
+          Seq [
+            Token (Name "when_condition");
+            Repeat (
+              Seq [
+                Token (Literal ",");
+                Token (Name "when_condition");
+              ];
+            );
+            Opt (
               Token (Literal ",");
-              Token (Name "when_condition");
-            ];
-          );
-          Opt (
-            Token (Literal ",");
-          );
-        ];
-        Token (Literal "else");
-      |];
-      Token (Literal "->");
-      Token (Name "control_structure_body");
-      Opt (
-        Token (Name "semi");
-      );
-    ];
+            );
+          ];
+          Token (Literal "else");
+        |];
+        Token (Literal "->");
+        Token (Name "control_structure_body");
+        Opt (
+          Token (Name "semi");
+        );
+      ];
+      Token (Name "ellipsis");
+    |];
   );
   "when_expression",
   Some (
@@ -4036,16 +4056,34 @@ and trans_class_body ((kind, body) : mt) : CST.class_body =
   match body with
   | Children v ->
       (match v with
-      | Seq [v0; v1; v2] ->
-          (
-            Run.trans_token (Run.matcher_token v0),
-            Run.opt
-              (fun v ->
-                trans_class_member_declarations (Run.matcher_token v)
-              )
-              v1
-            ,
-            Run.trans_token (Run.matcher_token v2)
+      | Alt (0, v) ->
+          `LCURL_opt_class_member_declas_RCURL (
+            (match v with
+            | Seq [v0; v1; v2] ->
+                (
+                  Run.trans_token (Run.matcher_token v0),
+                  Run.opt
+                    (fun v ->
+                      trans_class_member_declarations (Run.matcher_token v)
+                    )
+                    v1
+                  ,
+                  Run.trans_token (Run.matcher_token v2)
+                )
+            | _ -> assert false
+            )
+          )
+      | Alt (1, v) ->
+          `LCURL_ellips_RCURL (
+            (match v with
+            | Seq [v0; v1; v2] ->
+                (
+                  Run.trans_token (Run.matcher_token v0),
+                  trans_ellipsis (Run.matcher_token v1),
+                  Run.trans_token (Run.matcher_token v2)
+                )
+            | _ -> assert false
+            )
           )
       | _ -> assert false
       )
@@ -4643,31 +4681,49 @@ and trans_enum_class_body ((kind, body) : mt) : CST.enum_class_body =
   match body with
   | Children v ->
       (match v with
-      | Seq [v0; v1; v2; v3] ->
-          (
-            Run.trans_token (Run.matcher_token v0),
-            Run.opt
-              (fun v -> trans_enum_entries (Run.matcher_token v))
-              v1
-            ,
-            Run.opt
-              (fun v ->
-                (match v with
-                | Seq [v0; v1] ->
-                    (
-                      Run.trans_token (Run.matcher_token v0),
-                      Run.opt
-                        (fun v ->
-                          trans_class_member_declarations (Run.matcher_token v)
-                        )
-                        v1
+      | Alt (0, v) ->
+          `LCURL_opt_enum_entries_opt_SEMI_opt_class_member_declas_RCURL (
+            (match v with
+            | Seq [v0; v1; v2; v3] ->
+                (
+                  Run.trans_token (Run.matcher_token v0),
+                  Run.opt
+                    (fun v -> trans_enum_entries (Run.matcher_token v))
+                    v1
+                  ,
+                  Run.opt
+                    (fun v ->
+                      (match v with
+                      | Seq [v0; v1] ->
+                          (
+                            Run.trans_token (Run.matcher_token v0),
+                            Run.opt
+                              (fun v ->
+                                trans_class_member_declarations (Run.matcher_token v)
+                              )
+                              v1
+                          )
+                      | _ -> assert false
+                      )
                     )
-                | _ -> assert false
+                    v2
+                  ,
+                  Run.trans_token (Run.matcher_token v3)
                 )
-              )
-              v2
-            ,
-            Run.trans_token (Run.matcher_token v3)
+            | _ -> assert false
+            )
+          )
+      | Alt (1, v) ->
+          `LCURL_ellips_RCURL (
+            (match v with
+            | Seq [v0; v1; v2] ->
+                (
+                  Run.trans_token (Run.matcher_token v0),
+                  trans_ellipsis (Run.matcher_token v1),
+                  Run.trans_token (Run.matcher_token v2)
+                )
+            | _ -> assert false
+            )
           )
       | _ -> assert false
       )
@@ -4705,20 +4761,30 @@ and trans_enum_entry ((kind, body) : mt) : CST.enum_entry =
   match body with
   | Children v ->
       (match v with
-      | Seq [v0; v1; v2; v3] ->
-          (
-            Run.opt
-              (fun v -> trans_modifiers (Run.matcher_token v))
-              v0
-            ,
-            trans_simple_identifier (Run.matcher_token v1),
-            Run.opt
-              (fun v -> trans_value_arguments (Run.matcher_token v))
-              v2
-            ,
-            Run.opt
-              (fun v -> trans_class_body (Run.matcher_token v))
-              v3
+      | Alt (0, v) ->
+          `Opt_modifs_simple_id_opt_value_args_opt_class_body (
+            (match v with
+            | Seq [v0; v1; v2; v3] ->
+                (
+                  Run.opt
+                    (fun v -> trans_modifiers (Run.matcher_token v))
+                    v0
+                  ,
+                  trans_simple_identifier (Run.matcher_token v1),
+                  Run.opt
+                    (fun v -> trans_value_arguments (Run.matcher_token v))
+                    v2
+                  ,
+                  Run.opt
+                    (fun v -> trans_class_body (Run.matcher_token v))
+                    v3
+                )
+            | _ -> assert false
+            )
+          )
+      | Alt (1, v) ->
+          `Ellips (
+            trans_ellipsis (Run.matcher_token v)
           )
       | _ -> assert false
       )
@@ -7291,47 +7357,57 @@ and trans_when_entry ((kind, body) : mt) : CST.when_entry =
   match body with
   | Children v ->
       (match v with
-      | Seq [v0; v1; v2; v3] ->
-          (
-            (match v0 with
-            | Alt (0, v) ->
-                `When_cond_rep_COMMA_when_cond_opt_COMMA (
-                  (match v with
-                  | Seq [v0; v1; v2] ->
-                      (
-                        trans_when_condition (Run.matcher_token v0),
-                        Run.repeat
-                          (fun v ->
-                            (match v with
-                            | Seq [v0; v1] ->
-                                (
-                                  Run.trans_token (Run.matcher_token v0),
-                                  trans_when_condition (Run.matcher_token v1)
+      | Alt (0, v) ->
+          `Choice_when_cond_rep_COMMA_when_cond_opt_COMMA_DASHGT_cont_stru_body_opt_semi (
+            (match v with
+            | Seq [v0; v1; v2; v3] ->
+                (
+                  (match v0 with
+                  | Alt (0, v) ->
+                      `When_cond_rep_COMMA_when_cond_opt_COMMA (
+                        (match v with
+                        | Seq [v0; v1; v2] ->
+                            (
+                              trans_when_condition (Run.matcher_token v0),
+                              Run.repeat
+                                (fun v ->
+                                  (match v with
+                                  | Seq [v0; v1] ->
+                                      (
+                                        Run.trans_token (Run.matcher_token v0),
+                                        trans_when_condition (Run.matcher_token v1)
+                                      )
+                                  | _ -> assert false
+                                  )
                                 )
-                            | _ -> assert false
+                                v1
+                              ,
+                              Run.opt
+                                (fun v -> Run.trans_token (Run.matcher_token v))
+                                v2
                             )
-                          )
-                          v1
-                        ,
-                        Run.opt
-                          (fun v -> Run.trans_token (Run.matcher_token v))
-                          v2
+                        | _ -> assert false
+                        )
+                      )
+                  | Alt (1, v) ->
+                      `Else (
+                        Run.trans_token (Run.matcher_token v)
                       )
                   | _ -> assert false
                   )
-                )
-            | Alt (1, v) ->
-                `Else (
-                  Run.trans_token (Run.matcher_token v)
+                  ,
+                  Run.trans_token (Run.matcher_token v1),
+                  trans_control_structure_body (Run.matcher_token v2),
+                  Run.opt
+                    (fun v -> trans_semi (Run.matcher_token v))
+                    v3
                 )
             | _ -> assert false
             )
-            ,
-            Run.trans_token (Run.matcher_token v1),
-            trans_control_structure_body (Run.matcher_token v2),
-            Run.opt
-              (fun v -> trans_semi (Run.matcher_token v))
-              v3
+          )
+      | Alt (1, v) ->
+          `Ellips (
+            trans_ellipsis (Run.matcher_token v)
           )
       | _ -> assert false
       )
