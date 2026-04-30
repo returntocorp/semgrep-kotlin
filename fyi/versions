@@ -32,12 +32,29 @@ Last change in file:
         comment-separated variants
 ---
 File: semgrep-grammars/src/semgrep-kotlin/grammar.js
-Git repo name: tarides-kotlin
-Latest commit in repo: 4515172ebd992948d04b889d8dd546986fa90756
+Git repo name: agent-ab2e780793f6a980d
+Latest commit in repo: 536086719af14cc2b2c11b0c83032f033564baf9
 Last change in file:
-  commit 4515172ebd992948d04b889d8dd546986fa90756
-  Author: Puneeth Chaganti <punchagan@muse-amuse.in>
-  Date:   Tue Mar 10 20:57:04 2026 +0530
+  commit 536086719af14cc2b2c11b0c83032f033564baf9
+  Author: brandonspark <brandon@semgrep.com>
+  Date:   Wed Apr 29 17:34:52 2026 -0700
   
-      Remove workaround for newline between classname and constructor
+      [kotlin] fix Semgrep pattern parsing for class/when/enum class bodies
+      
+      Augment the Kotlin grammar so common Semgrep idioms parse cleanly:
+      
+      - Single-line `class Foo { ... }` (LANG-476): add a `seq("{", ellipsis,
+        "}")` alternative on `class_body` to bypass the `semis`-separator
+        requirement on members. This covers `class`, `interface`, `object`,
+        generics, annotation classes, and `@A class C { ... }`.
+      - `when (x) { ... }` (LANG-480): augment `when_entry` to accept a bare
+        ellipsis (with higher precedence than expression-form ellipsis) so
+        a `...` is parsed as a stand-alone entry rather than an expression.
+      - `enum class E { ... }` (LANG-483): mirror the `class_body` fix on
+        `enum_class_body` and extend `enum_entry` to accept `...` for the
+        multi-line `enum class E { A, B, ... }` form.
+      
+      Adds corpus tests covering each affected shape.
+      
+      Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ---
